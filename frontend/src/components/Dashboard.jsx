@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../api';
 import { Users, AlertTriangle, Thermometer, Target, Upload, Play, Loader2, AlertCircle, X, Copy, Check, User, Mail, Phone, Briefcase, Clock, Star, MessageSquare, LayoutDashboard, ClipboardList } from 'lucide-react';
 import DashboardBoard from './DashboardBoard';
 
@@ -49,8 +49,8 @@ export default function Dashboard() {
     setLoading(true);
     try {
       const [candidatesRes, statsRes] = await Promise.all([
-        axios.get('/api/candidates/segmented'),
-        axios.get('/api/stats'),
+        api.get('/candidates/segmented'),
+        api.get('/stats'),
       ]);
       setCandidates(candidatesRes.data);
       setStats(statsRes.data);
@@ -70,7 +70,7 @@ export default function Dashboard() {
     formData.append('file', file);
 
     try {
-      await axios.post('/api/candidates/import', formData, {
+      await api.post('/candidates/import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       fetchData();
@@ -91,7 +91,7 @@ export default function Dashboard() {
     setStrategyLoading(true);
     setStrategyModal({ candidate });
     try {
-      const res = await axios.post(`/api/candidates/${candidate.id}/strategy`);
+      const res = await api.post(`/candidates/${candidate.id}/strategy`);
       setStrategyModal({
         candidate,
         ...res.data,

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 import { PieChart, Pie, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell, ResponsiveContainer } from 'recharts';
 import { AlertTriangle, Play, CheckCircle2, Clock, TrendingUp, Users, Target } from 'lucide-react';
 
@@ -23,8 +23,8 @@ export default function DashboardBoard({ onGenerateStrategy }) {
     setLoading(true);
     try {
       const [candidatesRes, statsRes] = await Promise.all([
-        axios.get('/api/candidates/segmented'),
-        axios.get('/api/stats'),
+        api.get('/candidates/segmented'),
+        api.get('/stats'),
       ]);
       setCandidates(candidatesRes.data);
       setStats(statsRes.data);
