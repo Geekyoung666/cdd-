@@ -554,9 +554,9 @@ class LoginRequest(BaseModel):
 
 @app.post("/api/login", response_model=LoginResponse)
 def login(request: LoginRequest):
-    email = request.email
+    email = request.email.strip().lower()
     password = request.password
-    if email == "admin" and password == "admin":
+    if email in {"admin", "admin@example.com"} and password == "admin":
         user_info = {
             "user_id": "admin",
             "name": "Admin",
