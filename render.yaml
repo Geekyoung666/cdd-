@@ -5,7 +5,26 @@ services:
     plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    rootDir: backend
     envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./data/database.db
       - key: GEMINI_API_KEY
-        value: your_gemini_api_key_here
         sync: false
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+
+  - type: static
+    name: candidate-recall-frontend
+    env: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    rootDir: frontend
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: candidate-recall-backend
+          property: host
