@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -6,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from typing import Optional
 import csv
 import io
 import os
@@ -28,31 +31,38 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 class CandidateCreate(BaseModel):
     name: str
     position: str
-    industry: str | None = None
-    city: str | None = None
-    channel: str | None = None
-    interview_stage: str | None = None
-    last_contact_date: str | None = None
+    industry: Optional[str] = None
+    city: Optional[str] = None
+    channel: Optional[str] = None
+    interview_stage: Optional[str] = None
+    last_contact_date: Optional[str] = None
     interact_count: int = 0
     intent_score: int = 0
-    current_salary_k: int | None = None
-    expect_salary_k: int | None = None
-    note: str | None = None
+    current_salary_k: Optional[int] = None
+    expect_salary_k: Optional[int] = None
+    note: Optional[str] = None
 
 
 class CandidateUpdate(BaseModel):
-    name: str | None = None
-    position: str | None = None
-    industry: str | None = None
-    city: str | None = None
-    channel: str | None = None
-    interview_stage: str | None = None
-    last_contact_date: str | None = None
-    interact_count: int | None = None
-    intent_score: int | None = None
-    current_salary_k: int | None = None
-    expect_salary_k: int | None = None
-    note: str | None = None
+    name: Optional[str] = None
+    position: Optional[str] = None
+    industry: Optional[str] = None
+    city: Optional[str] = None
+    channel: Optional[str] = None
+    interview_stage: Optional[str] = None
+    last_contact_date: Optional[str] = None
+    interact_count: Optional[int] = None
+    intent_score: Optional[int] = None
+    current_salary_k: Optional[int] = None
+    expect_salary_k: Optional[int] = None
+    note: Optional[str] = None
+
+
+class StrategyGenerateRequest(BaseModel):
+    provider: Optional[str] = None
+    apiKey: Optional[str] = None
+    baseUrl: Optional[str] = None
+    model: Optional[str] = None
 
 app = FastAPI(title="候选人智能召回工作台", version="1.0.0")
 
@@ -67,8 +77,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup():
-    _migrate_database()
     Base.metadata.create_all(bind=engine)
+    _migrate_database()
     _init_sample_data()
 
 
@@ -307,7 +317,7 @@ def get_candidates(
 
 
 @app.post("/api/candidates/{id}/strategy")
-def get_candidate_strategy(id: int):
+def get_candidate_strategy(id: int, request: Optional[StrategyGenerateRequest] = None):
     db = SessionLocal()
     try:
         candidate = db.query(Candidate).filter(Candidate.id == id).first()
@@ -317,7 +327,8 @@ def get_candidate_strategy(id: int):
         candidate_dict = candidate.to_dict()
         rfm = calculate_rfm(candidate.last_contact_days, candidate.interact_count, candidate.intent_score)
 
-        result = generate_strategy(candidate_dict, rfm)
+        config = request.model_dump(exclude_none=True) if request else None
+        result = generate_strategy(candidate_dict, rfm, config)
 
         if "error" in result:
             return {"status": "error", **result}
@@ -489,8 +500,8 @@ def verify_jwt_token(token):
 class LoginResponse(BaseModel):
     success: bool
     message: str
-    token: str | None = None
-    user: dict | None = None
+    token: Optional[str] = None
+    user: Optional[dict] = None
 
 
 @app.get("/api/feishu/login")

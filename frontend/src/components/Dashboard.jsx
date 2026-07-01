@@ -49,6 +49,45 @@ const INTERVIEW_STAGES = [
 ];
 
 const IntentOptions = [1, 2, 3, 4, 5];
+const STRATEGY_CONFIG_STORAGE_KEY = "strategy_llm_config";
+const STRATEGY_PROVIDERS = ["openai", "deepseek", "claude", "gemini"];
+
+function readStoredStrategyConfig() {
+  if (typeof window === "undefined") {
+    return {
+      provider: "openai",
+      apiKey: "",
+      baseUrl: "",
+      model: "",
+    };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STRATEGY_CONFIG_STORAGE_KEY);
+    if (!raw) {
+      return {
+        provider: "openai",
+        apiKey: "",
+        baseUrl: "",
+        model: "",
+      };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      provider: parsed.provider || "openai",
+      apiKey: parsed.apiKey || "",
+      baseUrl: parsed.baseUrl || "",
+      model: parsed.model || "",
+    };
+  } catch (error) {
+    return {
+      provider: "openai",
+      apiKey: "",
+      baseUrl: "",
+      model: "",
+    };
+  }
+}
 
 const SegmentTag = ({ segment }) => {
   const { t } = useTranslation('common');
@@ -174,11 +213,22 @@ export default function Dashboard({ onLogout, onLanguageChange, currentLang }) {
   });
   const [toast, setToast] = useState(null);
   const fileInputRef = useRef(null);
+  const [strategyConfig, setStrategyConfig] = useState(readStoredStrategyConfig);
 
   const showToast = (message) => {
     setToast(message);
     setTimeout(() => setToast(null), 2000);
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      STRATEGY_CONFIG_STORAGE_KEY,
+      JSON.stringify(strategyConfig),
+    );
+  }, [strategyConfig]);
 
   const openFormModal = (candidate = null) => {
     if (candidate) {
@@ -398,6 +448,53 @@ export default function Dashboard({ onLogout, onLanguageChange, currentLang }) {
   const [strategyLoading, setStrategyLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const updateStrategyConfig = (field, value) => {
+    setStrategyConfig((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const buildStrategyPayload = () => {
+    const payload = {
+      provider: strategyConfig.provider?.trim(),
+      apiKey: strategyConfig.apiKey?.trim(),
+      baseUrl: strategyConfig.baseUrl?.trim(),
+      model: strategyConfig.model?.trim(),
+    };
+
+    return Object.fromEntries(
+      Object.entries(payload).filter(([, value]) => Boolean(value)),
+    );
+  };
+
+  const requestStrategy = async (candidate) => {
+    setStrategyLoading(true);
+    setStrategyModal({ candidate });
+    try {
+      const res = await api.post(
+        `/candidates/${candidate.id}/strategy`,
+        buildStrategyPayload(),
+      );
+      setStrategyModal({
+        candidate,
+        ...res.data,
+      });
+    } catch (error) {
+      console.error("Generate strategy failed:", error);
+      setStrategyModal({
+        candidate,
+        status: "error",
+        error:
+          error?.response?.data?.error ||
+          error?.response?.data?.message ||
+          "生成策略失败，请稍后重试",
+      });
+    } finally {
+      setStrategyLoading(false);
+    }
+  };
+
   const closeStrategyModal = () => {
     setClosingState((prev) => ({ ...prev, strategy: true }));
     setTimeout(() => {
@@ -408,24 +505,11 @@ export default function Dashboard({ onLogout, onLanguageChange, currentLang }) {
   };
 
   const handleGenerateStrategy = async (candidate) => {
-    setStrategyLoading(true);
     setStrategyModal({ candidate });
-    try {
-      const res = await api.post(`/candidates/${candidate.id}/strategy`);
-      setStrategyModal({
-        candidate,
-        ...res.data,
-      });
-    } catch (error) {
-      console.error("Generate strategy failed:", error);
-      setStrategyModal({
-        candidate,
-        status: "error",
-        error: "生成策略失败，请稍后重试",
-      });
-    } finally {
-      setStrategyLoading(false);
+    if (!strategyConfig.apiKey?.trim()) {
+      return;
     }
+    await requestStrategy(candidate);
   };
 
   const getSegmentCount = (segment) => {
@@ -1108,6 +1192,104 @@ export default function Dashboard({ onLogout, onLanguageChange, currentLang }) {
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900">
+                      {t("llm_settings")}
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {t("llm_settings_hint")}
+                    </p>
+                  </div>
+                  {(strategyModal.provider || strategyModal.model) && (
+                    <span className="text-xs text-slate-500">
+                      {strategyModal.provider || strategyConfig.provider}
+                      {strategyModal.model ? ` / ${strategyModal.model}` : ""}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-600">
+                      {t("provider")}
+                    </span>
+                    <select
+                      value={strategyConfig.provider}
+                      onChange={(e) =>
+                        updateStrategyConfig("provider", e.target.value)
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    >
+                      {STRATEGY_PROVIDERS.map((provider) => (
+                        <option key={provider} value={provider}>
+                          {provider}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-600">
+                      {t("model")}
+                    </span>
+                    <input
+                      value={strategyConfig.model}
+                      onChange={(e) =>
+                        updateStrategyConfig("model", e.target.value)
+                      }
+                      placeholder={t("model_placeholder")}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    />
+                  </label>
+
+                  <label className="block col-span-2">
+                    <span className="text-xs font-medium text-slate-600">
+                      {t("api_key")}
+                    </span>
+                    <input
+                      type="password"
+                      value={strategyConfig.apiKey}
+                      onChange={(e) =>
+                        updateStrategyConfig("apiKey", e.target.value)
+                      }
+                      placeholder={t("api_key_placeholder")}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    />
+                  </label>
+
+                  <label className="block col-span-2">
+                    <span className="text-xs font-medium text-slate-600">
+                      {t("base_url")}
+                    </span>
+                    <input
+                      value={strategyConfig.baseUrl}
+                      onChange={(e) =>
+                        updateStrategyConfig("baseUrl", e.target.value)
+                      }
+                      placeholder={t("base_url_placeholder")}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    />
+                  </label>
+                </div>
+
+                <button
+                  onClick={() => requestStrategy(strategyModal.candidate)}
+                  disabled={strategyLoading}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                >
+                  {strategyLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {strategyModal.script || strategyModal.risk_judgement
+                    ? t("regenerate_strategy")
+                    : t("generate_strategy_now")}
+                </button>
+              </div>
+
               {strategyLoading ? (
                 <div className="space-y-4">
                   <div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse" />
@@ -1137,7 +1319,16 @@ export default function Dashboard({ onLogout, onLanguageChange, currentLang }) {
                   </div>
                   <p className="text-sm text-red-700">{strategyModal.error}</p>
                   <p className="text-xs text-red-500 mt-2">
-                    {t('please_set_api_key')}
+                    {t('llm_error_hint')}
+                  </p>
+                </div>
+              ) : !strategyModal.risk_judgement ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                  <p className="text-sm font-medium text-slate-700">
+                    {t("llm_empty_state")}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {t("llm_empty_state_hint")}
                   </p>
                 </div>
               ) : (
@@ -1221,12 +1412,14 @@ export default function Dashboard({ onLogout, onLanguageChange, currentLang }) {
             </div>
 
             <div className="px-5 py-4 border-t border-gray-100 bg-white">
-              <button
-                onClick={closeStrategyModal}
-                className="w-full py-2.5 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
-              >
-                {t('close')}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={closeStrategyModal}
+                  className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
+                >
+                  {t('close')}
+                </button>
+              </div>
             </div>
           </div>
         </div>
