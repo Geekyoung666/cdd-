@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Analytics } from '@vercel/analytics/react';
 import Dashboard from './components/Dashboard';
 import LoginPage from './components/LoginPage';
 import { authApi } from './api';
@@ -90,30 +91,39 @@ function App() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
+      <>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+        <Analytics />
+      </>
     );
   }
 
   if (!isLoggedIn) {
     return (
-      <LoginPage
-        onLogin={handleLogin}
-        onGuestLogin={handleGuestLogin}
-        onLanguageChange={handleLanguageChange}
-        currentLang={currentLang}
-      />
+      <>
+        <LoginPage
+          onLogin={handleLogin}
+          onGuestLogin={handleGuestLogin}
+          onLanguageChange={handleLanguageChange}
+          currentLang={currentLang}
+        />
+        <Analytics />
+      </>
     );
   }
 
   return (
-    <Dashboard
-      currentUser={currentUser}
-      onLogout={handleLogout}
-      onLanguageChange={handleLanguageChange}
-      currentLang={currentLang}
-    />
+    <>
+      <Dashboard
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onLanguageChange={handleLanguageChange}
+        currentLang={currentLang}
+      />
+      <Analytics />
+    </>
   );
 }
 
