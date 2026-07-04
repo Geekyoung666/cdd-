@@ -6,14 +6,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
-API_KEY = os.getenv("API_KEY")
-API_BASE_URL = os.getenv("API_BASE_URL")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
+API_KEY = os.getenv("DEEPSEEK_API_KEY") or os.getenv("API_KEY")
+API_BASE_URL = os.getenv("DEEPSEEK_API_BASE_URL") or os.getenv("API_BASE_URL")
+MODEL_NAME = os.getenv("MODEL_NAME") or os.getenv("DEEPSEEK_MODEL") or "deepseek-chat"
 
 
 def generate_strategy(candidate: dict, rfm: dict) -> dict:
     if not API_KEY:
-        return {"error": "API_KEY 环境变量未设置"}
+        return {"error": "DEEPSEEK_API_KEY 或 API_KEY 环境变量未设置"}
 
     prompt = f"""
 你是一位资深的招聘运营专家，擅长分析候选人状态并生成个性化的召回策略。
@@ -63,7 +63,7 @@ I(意向程度)：{rfm.get('i')}分
 
 
 def call_openai_compatible(prompt: str) -> dict:
-    base_url = API_BASE_URL or "https://api.openai.com/v1"
+    base_url = (API_BASE_URL or "https://api.deepseek.com").rstrip("/")
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",
@@ -80,10 +80,17 @@ def call_openai_compatible(prompt: str) -> dict:
 
     with httpx.Client() as client:
         response = client.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text[:500] if exc.response is not None else str(exc)
+            raise RuntimeError(f"DeepSeek API 返回错误 {exc.response.status_code}: {detail}") from exc
         data = response.json()
 
-    content = data["choices"][0]["message"]["content"]
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError(f"DeepSeek API 响应格式异常：{json.dumps(data, ensure_ascii=False)[:500]}") from exc
     return parse_json_response(content)
 
 
@@ -160,4 +167,11 @@ def parse_json_response(text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except json.JSONDecodeError:
+                pass
         return {"error": f"JSON 解析失败：{text[:200]}"}
